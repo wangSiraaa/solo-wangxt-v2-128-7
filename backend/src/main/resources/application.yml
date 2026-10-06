@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: replay-ledger
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/investclass}
+    username: ${DB_USER:investclass}
+    password: ${DB_PASSWORD:investclass}
+    driver-class-name: org.postgresql.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      separator: "^"
+  batch:
+    jdbc:
+      initialize-schema: always
+      table-prefix: BATCH_
+    job:
+      enabled: false
+  jackson:
+    serialization:
+      write-bigdecimal-as-plain: true
+
+server:
+  port: 8080
+
+accounting:
+  scale:
+    shares: 8        # 股数精度（独立）
+    price: 6         # 每股价格精度（独立）
+    cash: 2          # 现金/金额精度（独立）
+    lot-cost: 6      # 批次单位成本保留精度
+  rounding:
+    shares: HALF_UP
+    price: HALF_UP
+    cash: HALF_UP
+
+logging:
+  level:
+    com.investclass: INFO

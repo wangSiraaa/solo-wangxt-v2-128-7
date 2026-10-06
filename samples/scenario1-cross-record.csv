@@ -1,0 +1,4 @@
+rowType,accountId,instrument,businessDate,settlementDate,recordDate,paymentDate,allotmentDate,side,quantity,price,commission,ratio,amountPerShare,rightsPerShare,subscriptionPrice,subscribedQty,currency,sourceKey
+TRADE,SC1,AAA,2026-09-23,2026-09-24,,,,BUY,100,10.00,5,,,,,,CNY,SC1-T1
+TRADE,SC1,AAA,2026-09-24,2026-09-25,,,,SELL,40,11.00,5,,,,,,CNY,SC1-T2
+CASH_DIVIDEND,SC1,AAA,2026-09-25,,2026-09-26,2026-09-30,,,,,,,0.50,,,,CNY,SC1-D1

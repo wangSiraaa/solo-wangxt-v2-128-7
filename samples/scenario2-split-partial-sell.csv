@@ -1,0 +1,4 @@
+rowType,accountId,instrument,businessDate,settlementDate,recordDate,paymentDate,allotmentDate,side,quantity,price,commission,ratio,amountPerShare,rightsPerShare,subscriptionPrice,subscribedQty,currency,sourceKey
+TRADE,SC2,BBB,2026-08-01,2026-08-02,,,,BUY,100,10.00,0,,,,,,CNY,SC2-T1
+STOCK_SPLIT,SC2,BBB,2026-08-10,,,,,,,,,3,,,,,CNY,SC2-S1
+TRADE,SC2,BBB,2026-08-11,2026-08-12,,,,SELL,150.5,4.00,0,,,,,,CNY,SC2-T2

@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: investclass
+      POSTGRES_USER: investclass
+      POSTGRES_PASSWORD: investclass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U investclass -d investclass"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/investclass
+      DB_USER: investclass
+      DB_PASSWORD: investclass
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

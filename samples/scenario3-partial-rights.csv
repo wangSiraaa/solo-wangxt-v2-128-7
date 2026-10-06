@@ -1,0 +1,3 @@
+rowType,accountId,instrument,businessDate,settlementDate,recordDate,paymentDate,allotmentDate,side,quantity,price,commission,ratio,amountPerShare,rightsPerShare,subscriptionPrice,subscribedQty,currency,sourceKey
+TRADE,SC3,CCC,2026-07-01,2026-07-02,,,,BUY,100,5.00,0,,,,,,CNY,SC3-T1
+RIGHTS_OFFER,SC3,CCC,2026-07-08,,2026-07-10,2026-07-12,2026-07-15,,,,,,,0.2,3.00,7,CNY,SC3-R1

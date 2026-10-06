@@ -1,0 +1,133 @@
+<div class="app-shell">
+  <div class="topbar">
+    <h1>可回放投资核算链</h1>
+    <span class="sub">事件账本是唯一事实源 · 投影/快照仅加速，可随时重放重建</span>
+    <div class="field">
+      <label>账户</label>
+      <input [(ngModel)]="account" (change)="refreshAll()" style="width:110px">
+    </div>
+    <div class="field">
+      <label>来源系统</label>
+      <input [(ngModel)]="sourceSystem" style="width:150px">
+    </div>
+    <div class="field">
+      <label>区间从</label>
+      <input type="date" [(ngModel)]="from" (change)="loadTimeline()">
+    </div>
+    <div class="field">
+      <label>到</label>
+      <input type="date" [(ngModel)]="to" (change)="loadTimeline()">
+    </div>
+    <button class="ghost" (click)="refreshAll()">刷新</button>
+  </div>
+
+  @if (message) {
+    <div class="alert ok">{{ message }}</div>
+  }
+  @if (error) {
+    <div class="alert bad">{{ error }}</div>
+  }
+
+  <div class="panel">
+    <div class="row">
+      <div class="field">
+        <label>导入 CSV（成交 / 拆股 / 分红 / 配股）</label>
+        <input type="file" accept=".csv" (change)="onFile($event)">
+      </div>
+      <button class="primary" [disabled]="loading" (click)="doImport()">批量导入</button>
+      <span class="spacer"></span>
+      <button (click)="doReplay(false)" [disabled]="loading">崩溃恢复重放</button>
+      <button (click)="doReplay(true)" [disabled]="loading">清空投影完整重建</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="row">
+      <div class="field">
+        <label>投影游标（一致检查点）</label>
+        <div class="mono" *ngIf="cursor; else noCursor">
+          事件 #{{ cursor.lastEventId }} · {{ cursor.lastBusinessDate || '—' }}
+          · {{ cursor.lastStage || '—' }} · {{ cursor.lastEffectKey || '—' }}
+        </div>
+        <ng-template #noCursor><span class="muted mono">尚未投影</span></ng-template>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button [class.active]="tab()==='timeline'" (click)="setTab('timeline')">事件时间轴</button>
+    <button [class.active]="tab()==='lots'" (click)="setTab('lots')">成本批次与来源</button>
+    <button [class.active]="tab()==='cash'" (click)="setTab('cash')">现金权益</button>
+    <button [class.active]="tab()==='eod'" (click)="setTab('eod')">日终复核与发布</button>
+  </div>
+
+  @switch (tab()) {
+    @case ('timeline') {
+      <div class="panel">
+        <h2>业务事件（不可变，仅追加）</h2>
+        <app-timeline [events]="events"></app-timeline>
+      </div>
+    }
+    @case ('lots') {
+      <div class="panel">
+        <h2>FIFO 成本批次（零碎股单列，衍生批次溯源到父批次）</h2>
+        <app-lots [lots]="lots"></app-lots>
+      </div>
+    }
+    @case ('cash') {
+      <app-cash-entitlements
+        [cash]="cash" [entitlements]="entitlements" [balance]="cashBalance">
+      </app-cash-entitlements>
+      <div class="panel">
+        <h2>效应检查点（每个检查点=股份指纹+现金+成本，崩溃后从一致游标续放）</h2>
+        <table>
+          <thead>
+            <tr><th>事件</th><th>业务日</th><th>阶段</th><th>效应键</th>
+              <th class="num">现金余额</th><th class="num">持仓成本</th><th class="num">已实现盈亏</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of checkpoints">
+              <td class="num mono">#{{ c.eventId }}</td>
+              <td>{{ c.businessDate }}</td>
+              <td>{{ c.stage }}</td>
+              <td class="mono">{{ c.effectKey }}</td>
+              <td class="num">{{ c.cashBalance }}</td>
+              <td class="num">{{ c.openCost }}</td>
+              <td class="num">{{ c.realizedPnl }}</td>
+            </tr>
+            <tr *ngIf="!checkpoints.length">
+              <td colspan="7" class="muted">尚无检查点，先执行重放。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    }
+    @case ('eod') {
+      <div class="panel">
+        <h2>日终草稿与发布</h2>
+        <div class="row">
+          <div class="field">
+            <label>业务日</label>
+            <input type="date" [(ngModel)]="eodDate">
+          </div>
+          <button (click)="doPrepare()">准备草稿（绑定水位）</button>
+          <button class="primary" (click)="doVerify()">运行三方守恒 + 账实核对</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="row">
+          <div class="field"><label>对账单证券</label>
+            <input [(ngModel)]="stmtInstrument" style="width:90px"></div>
+          <div class="field"><label>外部整股</label>
+            <input [(ngModel)]="stmtQty" style="width:100px"></div>
+          <div class="field"><label>外部零碎股</label>
+            <input [(ngModel)]="stmtFractional" style="width:90px"></div>
+          <div class="field"><label>外部成本</label>
+            <input [(ngModel)]="stmtCost" style="width:120px"></div>
+          <button (click)="uploadStatement()">录入对账单</button>
+        </div>
+      </div>
+
+      <app-reconciliation
+        [report]="report" [published]="published" (publish)="doPublish()">
+      </app-reconciliation>
+    }
+  }
+</div>
