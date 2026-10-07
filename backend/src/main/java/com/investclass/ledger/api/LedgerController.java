@@ -5,6 +5,7 @@ import com.investclass.ledger.eod.EodService;
 import com.investclass.ledger.eod.ReconciliationReport;
 import com.investclass.ledger.ledger.EventRepository;
 import com.investclass.ledger.projection.ProjectionService;
+import com.investclass.ledger.projection.SellTrialService;
 import com.investclass.ledger.projection.store.ProjectionCursorRepository;
 import com.investclass.ledger.projection.store.ProjectionReadRepository;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -24,15 +26,18 @@ public class LedgerController {
     private final EventRepository events;
     private final ProjectionReadRepository read;
     private final ProjectionService projection;
+    private final SellTrialService sellTrial;
     private final EodService eod;
     private final com.investclass.ledger.eod.SnapshotRepository snapshots;
 
     public LedgerController(EventRepository events, ProjectionReadRepository read,
-                            ProjectionService projection, EodService eod,
+                            ProjectionService projection, SellTrialService sellTrial,
+                            EodService eod,
                             com.investclass.ledger.eod.SnapshotRepository snapshots) {
         this.events = events;
         this.read = read;
         this.projection = projection;
+        this.sellTrial = sellTrial;
         this.eod = eod;
         this.snapshots = snapshots;
     }
@@ -52,6 +57,29 @@ public class LedgerController {
     @GetMapping("/api/accounts/{accountId}/lots")
     public List<ProjectionReadRepository.LotRow> lots(@PathVariable String accountId) {
         return read.lots(accountId);
+    }
+
+    /**
+     * 只读卖出试算（GET，纯内存重放，非正式入账）：
+     * 从截至试算结算点的现有事件规则预计批次结转、剩余整股/零碎股、结转成本与预计损益；
+     * 不追加事件、不推进游标、不写投影/现金、不发布快照。
+     * 超卖返回缺口（shortfallQty）而不产生负批次；未结算在途买入仅在 unsettled 中提示。
+     */
+    @GetMapping("/api/accounts/{accountId}/sell-trial")
+    public SellTrialService.Report sellTrial(
+            @PathVariable String accountId,
+            @RequestParam String instrument,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso =
+                    org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            LocalDate businessDate,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso =
+                    org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            LocalDate settlementDate,
+            @RequestParam BigDecimal qty,
+            @RequestParam BigDecimal price,
+            @RequestParam(defaultValue = "0") BigDecimal commission) {
+        return sellTrial.trial(accountId, instrument, businessDate, settlementDate,
+                qty, price, commission);
     }
 
     @GetMapping("/api/accounts/{accountId}/cash")

@@ -4,12 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { LedgerApi } from './ledger-api.service';
 import {
   BusinessEvent, CashEntry, Checkpoint, Cursor, Entitlement, Lot,
-  ReconciliationReport
+  ReconciliationReport, SellTrialReport
 } from './models';
 import { TimelineComponent } from './timeline.component';
 import { LotsComponent } from './lots.component';
 import { CashEntitlementsComponent } from './cash-entitlements.component';
 import { ReconciliationComponent } from './reconciliation.component';
+import { SellTrialComponent } from './sell-trial.component';
 
 type Tab = 'timeline' | 'lots' | 'cash' | 'eod';
 
@@ -18,7 +19,7 @@ type Tab = 'timeline' | 'lots' | 'cash' | 'eod';
   standalone: true,
   imports: [
     CommonModule, FormsModule, TimelineComponent, LotsComponent,
-    CashEntitlementsComponent, ReconciliationComponent
+    CashEntitlementsComponent, ReconciliationComponent, SellTrialComponent
   ],
   templateUrl: './app.component.html'
 })
@@ -44,6 +45,12 @@ export class AppComponent implements OnInit {
   message = '';
   error = '';
   loading = false;
+
+  // 只读卖出试算（非正式入账）
+  trialInstrument = 'BBB';
+  trialBusinessDate = '2026-08-11';
+  trialSettlementDate = '2026-08-12';
+  trialReport: SellTrialReport | null = null;
 
   // 对账单录入
   stmtInstrument = 'AAA';
@@ -161,6 +168,23 @@ export class AppComponent implements OnInit {
     }).subscribe({
       next: () => (this.message = '外部对账单已录入（仅用于账实核对，不反写历史）。'),
       error: (e) => this.fail(e)
+    });
+  }
+
+  doSellTrial(body: {
+    instrument: string; businessDate: string; settlementDate: string;
+    qty: number; price: number; commission: number;
+  }): void {
+    this.api.sellTrial(this.account, body).subscribe({
+      next: (r) => {
+        this.trialReport = r;
+        this.error = '';
+        this.message = '卖出试算完成（非正式入账；账本、游标、快照均未改变）。';
+      },
+      error: (e) => {
+        this.trialReport = null;
+        this.fail(e);
+      }
     });
   }
 

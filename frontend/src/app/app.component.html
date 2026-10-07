@@ -67,9 +67,18 @@
       </div>
     }
     @case ('lots') {
-      <div class="panel">
-        <h2>FIFO 成本批次（零碎股单列，衍生批次溯源到父批次）</h2>
-        <app-lots [lots]="lots"></app-lots>
+      <div class="trial-grid">
+        <div class="panel">
+          <h2>当前持仓 · FIFO 成本批次（正式投影）</h2>
+          <app-lots [lots]="lots"></app-lots>
+        </div>
+        <app-sell-trial
+          [instrument]="trialInstrument"
+          [businessDate]="trialBusinessDate"
+          [settlementDate]="trialSettlementDate"
+          [report]="trialReport"
+          (trial)="doSellTrial($event)">
+        </app-sell-trial>
       </div>
     }
     @case ('cash') {

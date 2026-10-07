@@ -106,3 +106,71 @@ export interface ReconciliationReport {
   projectedCash: string;
   externalCash: string | null;
 }
+
+/** 只读卖出试算（非正式入账）。 */
+export interface SellTrialTake {
+  lotKey: string;
+  openingEventId: number;
+  sourceEventType: string;
+  qty: string;
+  costReleased: string;
+  proceeds: string;
+}
+
+export interface SellTrialLot {
+  lotKey: string;
+  openingEventId: number;
+  sourceEventType: string;
+  acquiredDate: string;
+  remainingQtyBefore: string;
+  remainingCostBefore: string;
+  remainingQtyAfter: string;
+  remainingCostAfter: string;
+  fractional: boolean;
+  closed: boolean;
+  newLot: boolean;
+  derivedFromLotKey: string | null;
+}
+
+export interface SellTrialPending {
+  eventId: number;
+  businessDate: string;
+  settlementDate: string;
+  quantity: string;
+}
+
+export interface SellTrialPosition {
+  instrument: string;
+  wholeQty: string;
+  fractionalQty: string;
+  remainingCost: string;
+  avgCost: string;
+}
+
+export interface SellTrialReport {
+  accountId: string;
+  instrument: string;
+  businessDate: string;
+  settlementDate: string;
+  requestedQty: string;
+  price: string;
+  commission: string;
+  pendingSplitRatio: string;
+  settledQty: string;
+  adjustedPrice: string;
+  sellableQty: string;
+  coveredQty: string;
+  shortfallQty: string;
+  oversold: boolean;
+  grossProceeds: string;
+  netProceeds: string;
+  costReleased: string;
+  realizedPnl: string;
+  before: SellTrialPosition;
+  after: SellTrialPosition;
+  consumptions: SellTrialTake[];
+  lotChanges: SellTrialLot[];
+  unsettled: SellTrialPending[];
+  booked: boolean;
+  entryKind: 'PROFORMA_NOT_BOOKED';
+}

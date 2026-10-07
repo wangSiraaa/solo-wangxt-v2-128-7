@@ -24,4 +24,10 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(Map.of(
                 "error", "ILLEGAL_STATE", "message", String.valueOf(ex.getMessage())));
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> invalid(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "INVALID_TRIAL_INPUT", "message", String.valueOf(ex.getMessage())));
+    }
 }

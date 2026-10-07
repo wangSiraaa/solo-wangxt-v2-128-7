@@ -44,4 +44,18 @@ public final class FoldState {
                 .filter(l -> l.instrument().equals(instrument) && l.isOpen())
                 .toList();
     }
+
+    /**
+     * 只读试算用副本：深拷贝可变集合（Lot/记录本身不可变）。
+     * 试算在副本上结转批次，真实投影表与内存状态均不被触碰。
+     */
+    public FoldState copy() {
+        FoldState c = new FoldState(props);
+        c.lots.putAll(lots);
+        c.consumptions.putAll(consumptions);
+        c.cash.putAll(cash);
+        c.entitlements.putAll(entitlements);
+        c.realizedPnl = realizedPnl;
+        return c;
+    }
 }

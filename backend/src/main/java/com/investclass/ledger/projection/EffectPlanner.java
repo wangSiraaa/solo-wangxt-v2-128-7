@@ -199,7 +199,7 @@ public final class EffectPlanner {
     }
 
     /** (afterDate, upToDate] 区间内同一证券拆股比例的连乘积。 */
-    static BigDecimal splitProduct(List<Event> all, String instrument,
+    public static BigDecimal splitProduct(List<Event> all, String instrument,
                                    LocalDate afterDate, LocalDate upToDate,
                                    long excludeEventId) {
         BigDecimal p = BigDecimal.ONE;

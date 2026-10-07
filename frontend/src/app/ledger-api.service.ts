@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   BusinessEvent, CashEntry, Checkpoint, Cursor, Entitlement, Lot,
-  ReconciliationReport
+  ReconciliationReport, SellTrialReport
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -18,6 +18,24 @@ export class LedgerApi {
 
   lots(account: string): Observable<Lot[]> {
     return this.http.get<Lot[]>(`${this.base}/accounts/${account}/lots`);
+  }
+
+  /** 只读卖出试算（非正式入账；GET 不改变任何账本数据）。 */
+  sellTrial(account: string, body: {
+    instrument: string; businessDate: string; settlementDate: string;
+    qty: number; price: number; commission?: number;
+  }): Observable<SellTrialReport> {
+    return this.http.get<SellTrialReport>(
+      `${this.base}/accounts/${account}/sell-trial`, {
+        params: {
+          instrument: body.instrument,
+          businessDate: body.businessDate,
+          settlementDate: body.settlementDate,
+          qty: body.qty,
+          price: body.price,
+          commission: body.commission ?? 0
+        }
+      });
   }
 
   cash(account: string): Observable<{ entries: CashEntry[]; balance: string }> {

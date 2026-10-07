@@ -6,6 +6,7 @@ import com.investclass.ledger.core.MoneyMath;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -88,32 +89,113 @@ public final class FoldEngine {
         BigDecimal proceeds = MoneyMath.cash(eff.amount(), s.props);
         BigDecimal grossIn = MoneyMath.cash(proceeds.add(fee), s.props);
 
+        SellResult r = settleSell(s, eff.eventId(), eff.instrument(), eff.effectiveDate(),
+                eff.qty(), proceeds, false);
+        for (SellTake tk : r.takes()) {
+            s.consumptions.put(eff.eventId() + ":" + tk.lotKey(), new LotConsumption(
+                    tk.lotKey(), eff.eventId(), eff.instrument(), eff.effectiveDate(),
+                    tk.qty(), tk.costReleased(), tk.proceeds()));
+        }
+        s.realizedPnl = MoneyMath.cash(
+                s.realizedPnl.add(proceeds).subtract(r.releasedTotal()), s.props);
+
+        s.cash.put(cashKey(eff, "TRADE_SELL"), new CashEntry(eff.eventId(),
+                src.businessDate(), eff.effectiveDate(), eff.effectKey(),
+                "IN", grossIn, "TRADE_SELL",
+                accountId + ":" + eff.effectKey() + ":TRADE_SELL"));
+        if (fee.signum() > 0) {
+            s.cash.put(cashKey(eff, "COMMISSION"), new CashEntry(eff.eventId(),
+                    src.businessDate(), eff.effectiveDate(), eff.effectKey(),
+                    "OUT", fee, "COMMISSION",
+                    accountId + ":" + eff.effectKey() + ":COMMISSION"));
+        }
+    }
+
+    /** 试算卖出使用的虚拟事件 id（真实事件 id 从 1 开始，0 永不落库）。 */
+    public static final long TRIAL_EVENT_ID = 0L;
+
+    /**
+     * 只读卖出试算：在调用方给定的（应为副本的）{@link FoldState} 上按与真实卖出完全相同的
+     * FIFO / 精度 / 零碎股规则结转批次，但不写 consumption、不写现金、不产生事件。
+     *
+     * 超卖时不抛异常：按现有 FIFO 规则只结转可卖部分，返回缺口 {@code shortfallQty}，
+     * 任何批次剩余数量都不会为负。{@code proceeds} 由调用方按可成交部分折算后传入。
+     */
+    public static TrialSellResult simulateSell(FoldState s, String instrument,
+                                               LocalDate atDate, BigDecimal requestedQty,
+                                               BigDecimal proceeds) {
+        SellResult r = settleSell(s, TRIAL_EVENT_ID, instrument, atDate, requestedQty,
+                MoneyMath.cash(proceeds, s.props), true);
+        BigDecimal pnlDelta = MoneyMath.cash(
+                proceeds.subtract(r.releasedTotal()), s.props);
+        s.realizedPnl = MoneyMath.cash(s.realizedPnl.add(pnlDelta), s.props);
+        return new TrialSellResult(r.takes(), r.coveredQty(), r.shortfallQty(),
+                r.releasedTotal(), pnlDelta);
+    }
+
+    /** 试算卖出结果（预计结转，从不落库）。 */
+    public record TrialSellResult(List<SellTake> takes, BigDecimal coveredQty,
+                                  BigDecimal shortfallQty, BigDecimal costReleasedTotal,
+                                  BigDecimal realizedPnlDelta) {
+    }
+
+    /** 单笔批次结转（试算与真实卖出共用的展示口径）。 */
+    public record SellTake(String lotKey, Long openingEventId, String sourceEventType,
+                           BigDecimal qty, BigDecimal costReleased, BigDecimal proceeds) {
+    }
+
+    private record SellResult(List<SellTake> takes, BigDecimal coveredQty,
+                              BigDecimal shortfallQty, BigDecimal releasedTotal) {
+    }
+
+    private record LotTake(Lot lot, BigDecimal qty, BigDecimal cost, BigDecimal proceeds) {
+    }
+
+    /**
+     * FIFO 卖出结算的纯计算核心（真实卖出与只读试算共用，保证两条路径规则一致）：
+     *  - 按 FIFO 顺序从开放批次逐批扣减；
+     *  - 每批次独立精确到分：完全清空释放全部剩余成本；部分卖出按剩余比例舍入，
+     *    舍入尾差留在本批次自身，不跨批泄漏；
+     *  - 收入按释放成本比例分配，最后一笔吸收尾差；
+     *  - 卖出后剩余含零头则整股/零碎股拆批（零碎股单列），保持 FIFO 顺序；
+     *  - allowShort=false（真实入账）：超卖抛 {@link AccountingException}；
+     *    allowShort=true（试算）：只结转可卖部分并返回缺口，不产生负批次。
+     */
+    private static SellResult settleSell(FoldState s, long sellingEventId, String instrument,
+                                         LocalDate atDate, BigDecimal requestedQty,
+                                         BigDecimal proceeds, boolean allowShort) {
         List<Lot> candidates = s.lots.values().stream()
-                .filter(l -> l.instrument().equals(eff.instrument()) && l.isOpen())
+                .filter(l -> l.instrument().equals(instrument) && l.isOpen())
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        BigDecimal need = MoneyMath.shares(eff.qty(), s.props);
-        List<LotTake> takes = new ArrayList<>();
+        BigDecimal need = MoneyMath.shares(requestedQty, s.props);
+        BigDecimal available = MoneyMath.shares(candidates.stream()
+                .map(Lot::remainingQty).reduce(BigDecimal.ZERO, BigDecimal::add), s.props);
+        BigDecimal shortfall = MoneyMath.shares(need.subtract(available).max(BigDecimal.ZERO),
+                s.props);
+        if (shortfall.signum() > 0 && !allowShort) {
+            throw new AccountingException(sellingEventId,
+                    "oversell " + instrument + " qty=" + requestedQty
+                            + " short by " + shortfall + " on settlement " + atDate);
+        }
+
+        List<LotTake> rawTakes = new ArrayList<>();
+        BigDecimal remain = need;
         for (Lot lot : candidates) {
-            if (need.signum() == 0) {
+            if (remain.signum() == 0) {
                 break;
             }
-            BigDecimal take = need.min(lot.remainingQty());
-            need = MoneyMath.shares(need.subtract(take), s.props);
-            takes.add(new LotTake(lot, take));
-        }
-        if (need.signum() > 0) {
-            throw new AccountingException(eff.eventId(),
-                    "oversell " + eff.instrument() + " qty=" + eff.qty()
-                            + " short by " + need + " on settlement " + eff.effectiveDate());
+            BigDecimal take = remain.min(lot.remainingQty());
+            remain = MoneyMath.shares(remain.subtract(take), s.props);
+            rawTakes.add(new LotTake(lot, take, null, null));
         }
 
         // 成本结转（每个批次独立精确到分）：
         //  - 完全清空：释放全部剩余成本；
         //  - 部分卖出：新剩余成本按剩余比例舍入，released = 旧成本 - 新成本，
         //    舍入尾差留在本批次自身，不跨批泄漏。
-        List<BigDecimal> costs = new ArrayList<>();
         BigDecimal releasedTotal = BigDecimal.ZERO;
-        for (LotTake tk : takes) {
+        List<LotTake> withCost = new ArrayList<>();
+        for (LotTake tk : rawTakes) {
             BigDecimal cost;
             if (tk.qty.compareTo(tk.lot.remainingQty()) == 0) {
                 cost = tk.lot.remainingCost();
@@ -125,36 +207,35 @@ public final class FoldEngine {
                         .divide(tk.lot.remainingQty(), RoundingMode.HALF_UP), s.props);
                 cost = MoneyMath.cash(tk.lot.remainingCost().subtract(leftCost), s.props);
             }
-            costs.add(cost);
             releasedTotal = releasedTotal.add(cost);
+            withCost.add(new LotTake(tk.lot, tk.qty, cost, null));
         }
 
         // 收入按释放成本比例分配到结转行，最后一笔吸收尾差
         BigDecimal allocated = BigDecimal.ZERO;
-        // 卖出后若剩余数量含零头，整股与零碎股拆成两批（零碎股单列），保持 FIFO 顺序
-        record Residual(String parentKey, Lot whole, Lot frac) {
-        }
-        List<Residual> residuals = new ArrayList<>();
-        for (int i = 0; i < takes.size(); i++) {
-            LotTake tk = takes.get(i);
-            BigDecimal cost = costs.get(i);
+        List<LotTake> takes = new ArrayList<>();
+        for (int i = 0; i < withCost.size(); i++) {
+            LotTake tk = withCost.get(i);
             BigDecimal part;
-            if (i == takes.size() - 1) {
+            if (i == withCost.size() - 1) {
                 part = proceeds.subtract(allocated);
             } else if (releasedTotal.signum() == 0) {
                 part = BigDecimal.ZERO.setScale(s.props.scale().cash());
             } else {
-                part = MoneyMath.cash(proceeds.multiply(cost)
+                part = MoneyMath.cash(proceeds.multiply(tk.cost)
                         .divide(releasedTotal, RoundingMode.HALF_UP), s.props);
             }
             allocated = allocated.add(part);
+            takes.add(new LotTake(tk.lot, tk.qty, tk.cost, part));
+        }
 
-            LotConsumption c = new LotConsumption(tk.lot.lotKey(), eff.eventId(),
-                    eff.instrument(), eff.effectiveDate(), tk.qty, cost, part);
-            s.consumptions.put(eff.eventId() + ":" + tk.lot.lotKey(), c);
-
+        // 卖出后若剩余数量含零头，整股与零碎股拆成两批（零碎股单列），保持 FIFO 顺序
+        record Residual(String parentKey, Lot whole, Lot frac) {
+        }
+        List<Residual> residuals = new ArrayList<>();
+        for (LotTake tk : takes) {
             BigDecimal newQty = MoneyMath.shares(tk.lot.remainingQty().subtract(tk.qty), s.props);
-            BigDecimal newCost = MoneyMath.cash(tk.lot.remainingCost().subtract(cost), s.props);
+            BigDecimal newCost = MoneyMath.cash(tk.lot.remainingCost().subtract(tk.cost), s.props);
             boolean closed = newQty.signum() == 0;
             Lot whole;
             Lot fracLot = null;
@@ -184,7 +265,7 @@ public final class FoldEngine {
                             wholeUnit, false, false, tk.lot.derivedFromLotKey(),
                             tk.lot.adjustedByEventId());
                 }
-                String fracKey = "L" + eff.eventId() + ":FRAC:" + tk.lot.lotKey();
+                String fracKey = "L" + sellingEventId + ":FRAC:" + tk.lot.lotKey();
                 fracLot = new Lot(fracKey, tk.lot.openingEventId(),
                         tk.lot.sourceEventType(), tk.lot.instrument(), tk.lot.acquiredDate(),
                         tk.lot.openQty(), fracQty, tk.lot.totalCost(), fracCost,
@@ -218,19 +299,13 @@ public final class FoldEngine {
                 s.markChangedLot(r.parentKey());
             }
         }
-        s.realizedPnl = MoneyMath.cash(s.realizedPnl.add(proceeds).subtract(releasedTotal),
-                s.props);
 
-        s.cash.put(cashKey(eff, "TRADE_SELL"), new CashEntry(eff.eventId(),
-                src.businessDate(), eff.effectiveDate(), eff.effectKey(),
-                "IN", grossIn, "TRADE_SELL",
-                accountId + ":" + eff.effectKey() + ":TRADE_SELL"));
-        if (fee.signum() > 0) {
-            s.cash.put(cashKey(eff, "COMMISSION"), new CashEntry(eff.eventId(),
-                    src.businessDate(), eff.effectiveDate(), eff.effectKey(),
-                    "OUT", fee, "COMMISSION",
-                    accountId + ":" + eff.effectKey() + ":COMMISSION"));
-        }
+        List<SellTake> takeViews = takes.stream()
+                .map(tk -> new SellTake(tk.lot.lotKey(), tk.lot.openingEventId(),
+                        tk.lot.sourceEventType(), tk.qty, tk.cost, tk.proceeds))
+                .toList();
+        BigDecimal coveredQty = MoneyMath.shares(need.subtract(shortfall), s.props);
+        return new SellResult(takeViews, coveredQty, shortfall, releasedTotal);
     }
 
     // ---------------- 拆股 ----------------
@@ -405,8 +480,5 @@ public final class FoldEngine {
 
     private static Long unbox(Long v) {
         return v == null ? Long.MIN_VALUE : v;
-    }
-
-    private record LotTake(Lot lot, BigDecimal qty) {
     }
 }
