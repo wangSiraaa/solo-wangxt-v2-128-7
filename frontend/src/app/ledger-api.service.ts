@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   BusinessEvent, CashEntry, Checkpoint, Cursor, Entitlement, Lot,
-  ReconciliationReport
+  ReconciliationReport, SellSimulation, SellSimulationRequest
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -40,6 +40,12 @@ export class LedgerApi {
   replay(account: string, fullRebuild = false): Observable<unknown> {
     return this.http.post(`${this.base}/accounts/${account}/replay`, null,
       { params: { fullRebuild } });
+  }
+
+  /** 卖出试算（只读）：不追加事件、不推进游标、不发布快照。 */
+  simulateSell(account: string, body: SellSimulationRequest): Observable<SellSimulation> {
+    return this.http.post<SellSimulation>(
+      `${this.base}/accounts/${account}/sell-simulation`, body);
   }
 
   prepare(account: string, date: string): Observable<unknown> {

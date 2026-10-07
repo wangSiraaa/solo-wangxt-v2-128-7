@@ -67,6 +67,21 @@ CSV(并发/重复文件)
 
 任一账实不平，发布返回 `409 PUBLISH_BLOCKED` 并带 `earliestMismatchEventId`。
 
+## 卖出试算（只读 what-if）
+
+`POST /api/accounts/{accountId}/sell-simulation`，请求体
+`{instrument, tradeDate, settlementDate, quantity, price}`。
+
+正式导入卖出事件前，先在课堂上回答“这笔卖出会消耗哪些 FIFO 批次”：
+把假设卖出按与真实成交相同的效应规则（在途拆股折算、复权价、规范排序）插入效应流，
+在一次性内存状态上折叠到试算结算点，返回预计批次消耗、剩余整股/零碎股、
+结转成本与预计损益；前端“成本批次”页与当前持仓并列展示，并标明“非正式入账”。
+
+- **只读**：不追加事件、不推进游标、不发布快照，可反复试算，账本行数不变；
+- **超卖**：返回缺口（shortfall），试算数量封顶在可卖数量，不产生负批次；
+- **未结算持仓**：结算日晚于试算结算点的买入不在批次中，自然不可卖；
+- **精度尾差**：沿用 FoldEngine 既有结转规则（部分卖出的舍入尾差留在本批次）。
+
 ## 运行
 
 ```bash
@@ -91,5 +106,6 @@ cd backend && mvn spring-boot:run
 cd backend && mvn test
 ```
 
-17 个测试：8 个纯函数核算（FoldEngine）、3 个三方守恒/账实（Reconciliator）、
-6 个真实嵌入式 PostgreSQL 端到端（不可变账本、并发幂等导入、崩溃续放、日终阻断、迟到成交）。
+21 个测试：8 个纯函数核算（FoldEngine）、3 个三方守恒/账实（Reconciliator）、
+10 个真实嵌入式 PostgreSQL 端到端（不可变账本、并发幂等导入、崩溃续放、日终阻断、迟到成交、
+卖出试算只读/缺口/未结算持仓/HTTP 层）。

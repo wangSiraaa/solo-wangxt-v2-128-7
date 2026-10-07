@@ -43,6 +43,13 @@ public final class EffectPlanner {
     public record Planned(List<Effect> effects) {
     }
 
+    /** 规范顺序：(生效日, 阶段序号, 事件 id, effectKey)。试算插入假设效应时用同一顺序。 */
+    private static final Comparator<Effect> CANONICAL_ORDER = Comparator
+            .comparing(Effect::effectiveDate)
+            .thenComparingInt(eff -> stageOrder(eff.stage()))
+            .thenComparingLong(Effect::eventId)
+            .thenComparing(Effect::effectKey);
+
     public static Planned plan(List<Event> events) {
         List<Event> ordered = events.stream()
                 .sorted(Comparator.comparing(Event::businessDate).thenComparing(Event::id))
@@ -62,12 +69,37 @@ public final class EffectPlanner {
             }
         }
 
-        out.sort(Comparator
-                .comparing(Effect::effectiveDate)
-                .thenComparingInt(eff -> stageOrder(eff.stage()))
-                .thenComparingLong(Effect::eventId)
-                .thenComparing(Effect::effectKey));
+        out.sort(CANONICAL_ORDER);
         return new Planned(out);
+    }
+
+    /**
+     * 在既有事件计划之外追加假设效应（卖出试算），按同一规范顺序重排。
+     * 纯函数：不触碰事件账本，假设效应只存在于返回列表中。
+     */
+    public static List<Effect> planWithExtra(List<Event> events, Effect... extra) {
+        List<Effect> out = new ArrayList<>(plan(events).effects());
+        out.addAll(List.of(extra));
+        out.sort(CANONICAL_ORDER);
+        return out;
+    }
+
+    /**
+     * 构造一笔假设卖出效应（只读试算用，绝不落库）：
+     * 与真实卖出完全相同的规则 —— 在途拆股按 (交易日, 结算日] 连乘积折算结算数量、
+     * 价格复权，金额仍按原始成交口径。佣金按 0 处理（试算输入不含费用）。
+     */
+    public static Effect hypotheticalSell(List<Event> all, long simEventId, String instrument,
+                                          LocalDate tradeDate, LocalDate settlementDate,
+                                          BigDecimal qty, BigDecimal price) {
+        BigDecimal pendingRatio = splitProduct(all, instrument, tradeDate, settlementDate, -1L);
+        BigDecimal settledQty = MoneyMath.shares(qty.multiply(pendingRatio), P);
+        BigDecimal adjustedPrice = MoneyMath.price(
+                price.divide(pendingRatio, P.scale().price(), RoundingMode.HALF_UP), P);
+        BigDecimal gross = MoneyMath.cash(qty.multiply(price), P);
+        return new Effect(Effect.key(simEventId, "SELL_SETTLE"), simEventId, settlementDate,
+                "SELL_SETTLE", Effect.Kind.SELL_SETTLE, instrument, settledQty, gross,
+                adjustedPrice, BigDecimal.ZERO, pendingRatio, List.of());
     }
 
     private static int stageOrder(String stage) {

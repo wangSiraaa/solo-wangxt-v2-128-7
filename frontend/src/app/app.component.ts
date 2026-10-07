@@ -10,6 +10,7 @@ import { TimelineComponent } from './timeline.component';
 import { LotsComponent } from './lots.component';
 import { CashEntitlementsComponent } from './cash-entitlements.component';
 import { ReconciliationComponent } from './reconciliation.component';
+import { SellSimulationComponent } from './sell-simulation.component';
 
 type Tab = 'timeline' | 'lots' | 'cash' | 'eod';
 
@@ -18,7 +19,7 @@ type Tab = 'timeline' | 'lots' | 'cash' | 'eod';
   standalone: true,
   imports: [
     CommonModule, FormsModule, TimelineComponent, LotsComponent,
-    CashEntitlementsComponent, ReconciliationComponent
+    CashEntitlementsComponent, ReconciliationComponent, SellSimulationComponent
   ],
   templateUrl: './app.component.html'
 })

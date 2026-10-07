@@ -5,11 +5,13 @@ import com.investclass.ledger.eod.EodService;
 import com.investclass.ledger.eod.ReconciliationReport;
 import com.investclass.ledger.ledger.EventRepository;
 import com.investclass.ledger.projection.ProjectionService;
+import com.investclass.ledger.projection.SellSimulationService;
 import com.investclass.ledger.projection.store.ProjectionCursorRepository;
 import com.investclass.ledger.projection.store.ProjectionReadRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,15 +26,18 @@ public class LedgerController {
     private final EventRepository events;
     private final ProjectionReadRepository read;
     private final ProjectionService projection;
+    private final SellSimulationService sellSimulation;
     private final EodService eod;
     private final com.investclass.ledger.eod.SnapshotRepository snapshots;
 
     public LedgerController(EventRepository events, ProjectionReadRepository read,
-                            ProjectionService projection, EodService eod,
+                            ProjectionService projection, SellSimulationService sellSimulation,
+                            EodService eod,
                             com.investclass.ledger.eod.SnapshotRepository snapshots) {
         this.events = events;
         this.read = read;
         this.projection = projection;
+        this.sellSimulation = sellSimulation;
         this.eod = eod;
         this.snapshots = snapshots;
     }
@@ -83,6 +88,18 @@ public class LedgerController {
             @RequestParam(defaultValue = "false") boolean fullRebuild) {
         return projection.projectTo(accountId, projection.currentWatermark(accountId),
                 fullRebuild);
+    }
+
+    /**
+     * 卖出试算（只读 what-if）：按现有事件规则折叠到试算结算点，
+     * 返回预计批次消耗、剩余整股/零碎股、结转成本与预计损益。
+     * 不追加事件、不推进游标、不发布快照 —— 结果非正式入账。
+     */
+    @PostMapping("/api/accounts/{accountId}/sell-simulation")
+    public SellSimulationService.Result simulateSell(
+            @PathVariable String accountId,
+            @RequestBody SellSimulationService.Request req) {
+        return sellSimulation.simulate(accountId, req);
     }
 
     /** 日终：准备草稿（绑定水位）。 */

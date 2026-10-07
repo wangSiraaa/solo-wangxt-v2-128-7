@@ -106,3 +106,64 @@ export interface ReconciliationReport {
   projectedCash: string;
   externalCash: string | null;
 }
+
+/** 卖出试算输入（只读 what-if，不产生任何入账）。 */
+export interface SellSimulationRequest {
+  instrument: string;
+  tradeDate: string;
+  settlementDate: string;
+  quantity: number;
+  price: number;
+}
+
+/** 单个 FIFO 批次的预计消耗。 */
+export interface SellTake {
+  lotKey: string;
+  qty: string;
+  costReleased: string;
+  proceeds: string;
+}
+
+export interface PositionView {
+  instrument: string;
+  qty: string;
+  fractionalQty: string;
+  openCost: string;
+  avgCost: string;
+}
+
+/** 试算后的批次快照（含被结清批次与衍生零碎批）。 */
+export interface SimLotAfter {
+  lotKey: string;
+  remainingQty: string;
+  remainingCost: string;
+  unitCost: string;
+  fractional: boolean;
+  closed: boolean;
+  derivedFromLotKey: string | null;
+}
+
+/** 卖出试算结果：booked 恒为 false —— 非正式入账。 */
+export interface SellSimulation {
+  accountId: string;
+  instrument: string;
+  tradeDate: string;
+  settlementDate: string;
+  requestedQty: string;
+  price: string;
+  pendingSplitRatio: string;
+  settledQty: string;
+  adjustedPrice: string;
+  availableQty: string;
+  simulatedQty: string;
+  feasible: boolean;
+  shortfall: string;
+  takes: SellTake[];
+  costReleased: string;
+  proceeds: string;
+  expectedPnl: string;
+  positionsBefore: PositionView[];
+  positionsAfter: PositionView[];
+  lotsAfter: SimLotAfter[];
+  booked: boolean;
+}

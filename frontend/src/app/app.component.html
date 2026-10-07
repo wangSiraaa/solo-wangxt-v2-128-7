@@ -71,6 +71,10 @@
         <h2>FIFO 成本批次（零碎股单列，衍生批次溯源到父批次）</h2>
         <app-lots [lots]="lots"></app-lots>
       </div>
+      <div class="panel">
+        <h2>卖出试算（与当前持仓并列，结果非正式入账）</h2>
+        <app-sell-simulation [account]="account" [lots]="lots"></app-sell-simulation>
+      </div>
     }
     @case ('cash') {
       <app-cash-entitlements
